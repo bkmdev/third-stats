@@ -207,6 +207,7 @@
     "mailsSent": "Mails sent",
     "mailsStarred": "Mails starred",
     "mailsTagged": "{0} mails tagged",
+    "mailsWithAttachments": "{0} with attachments",
     "mailsTotal": "Mails total",
     "mailsUnread": "Mails unread",
     "message": "-",
@@ -215,6 +216,7 @@
     "percentOfReceived": "{0}% of received",
     "percentOfTotal": "{0}% of total",
     "timePeriod": "Date range",
+    "totalMailSize": "Total mail size",
     "title": "Statistics",
     "tooltips": {
       "clear": "Clear selection",

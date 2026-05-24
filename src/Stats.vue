@@ -317,6 +317,12 @@
 				</div>
 				<!-- starred / tagged -->
 				<div>
+					<div class='text-gray'>{{ t('stats.totalMailSize') }}</div>
+					<div class='featured'>{{ totalMailSize }}</div>
+					<div class='text-gray'>{{ t('stats.mailsWithAttachments', [mailsWithAttachments]) }}</div>
+				</div>
+				<!-- starred / tagged -->
+				<div>
 					<div class='text-gray'>{{ t('stats.mailsStarred') }}</div>
 					<div class='featured'>{{ starred.toLocaleString() }}</div>
 					<div class='text-gray'>{{ t('stats.mailsTagged', [tagged]) }}</div>
@@ -872,6 +878,7 @@ import {
 import {
 	contactInvolved,
 	extractEmailAddress,
+	formatBytes,
 	formatDate,
 	isSelfMessage,
 	monthNames,
@@ -985,6 +992,8 @@ const initData = () => ({
 	},
 	numbers: {
 		total: 0,
+		totalSize: 0,
+		withAttachments: 0,
 		unread: 0,
 		received: 0,
 		sent: 0,
@@ -1192,6 +1201,8 @@ const analyzeMessage = (data, m, identityList) => {
 	const author = extractEmailAddress(m.author);
 	// numbers
 	data.numbers.total++;
+	data.numbers.totalSize += m.size ?? 0;
+	if (m.hasAttachments) data.numbers.withAttachments++;
 	if (m.read === false) data.numbers.unread++;
 	if (identityList.includes(author)) {
 		data.numbers.sent++;
@@ -1499,6 +1510,8 @@ const loadAccount = async (id, refresh, auto=false) => {
 		sum.meta.timestamp = accountsData.reduce((p,c) => p < c.meta.timestamp ? p : c.meta.timestamp, Date.now());
 		// numbers
 		sum.numbers.total = accountsData.reduce((p,c) => p+c.numbers.total, 0);
+		sum.numbers.totalSize = accountsData.reduce((p,c) => p+(c.numbers.totalSize ?? 0), 0);
+		sum.numbers.withAttachments = accountsData.reduce((p,c) => p+(c.numbers.withAttachments ?? 0), 0);
 		sum.numbers.unread = accountsData.reduce((p,c) => p+c.numbers.unread, 0);
 		sum.numbers.received = accountsData.reduce((p,c) => p+c.numbers.received, 0);
 		sum.numbers.sent = accountsData.reduce((p,c) => p+c.numbers.sent, 0);
@@ -1880,6 +1893,8 @@ const perYear = computed(() => {
 		? oneDigit(display.value.numbers.total/years.value)
 		: 0;
 });
+const totalMailSize = computed(() => formatBytes(display.value.numbers.totalSize ?? 0));
+const mailsWithAttachments = computed(() => (display.value.numbers.withAttachments ?? 0).toLocaleString());
 // number of starred mails
 const starred = computed(() => {
 	return (display.value.numbers.starred && display.value.numbers.starred > 0)
