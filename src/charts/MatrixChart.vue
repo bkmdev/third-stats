@@ -27,6 +27,7 @@ const props = defineProps({
 	dimension: Object,   // {cols, rows}
 	parseTime: Boolean,  // if true, parse values as Date objects
 	datasets: Array,     // [{data: [[date, value], [date, value], ...], label: ''}, ...]
+	formatValue: Function,
 });
 
 const processedDatasets = computed(() => {
@@ -79,7 +80,7 @@ const draw = () => {
 						title: tooltipItems => tooltipItems[0].dataset.data[tooltipItems[0].dataIndex].d,
 						label: context => {
 							const v = context.dataset.data[context.dataIndex];
-							return [' ' + v.v + ' ' + context.dataset.label];
+							return [' ' + (props.formatValue ? props.formatValue(v.v) : v.v) + ' ' + context.dataset.label];
 						},
 						labelColor: () => {
 							return {

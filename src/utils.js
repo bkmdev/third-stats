@@ -105,15 +105,38 @@ const isSelfMessage = (message, identities) => {
 	return true;
 };
 
+const awaitWithDebug = async (promise, label) => {
+	if (!label) return promise;
+
+	let pending = true;
+	const timer = setTimeout(() => {
+		if (pending) console.warn(`[ThirdStats] Still waiting for ${label}`);
+	}, 10000);
+
+	try {
+		console.debug(`[ThirdStats] Starting ${label}`);
+		const result = await promise;
+		console.debug(`[ThirdStats] Finished ${label}`);
+		return result;
+	} finally {
+		pending = false;
+		clearTimeout(timer);
+	}
+};
+
 // generator to query messages of given folder
-const queryMessages = async function* (folderId, fromDate, toDate) {
+const queryMessages = async function* (folderId, fromDate, toDate, debugLabel=null) {
 	// handle date filter
 	const dateFilterActive = fromDate && toDate;
 	const from = new Date(fromDate).setUTCHours(0,0,0,0);
 	const to = new Date(toDate).setUTCHours(23,59,59,999);
 	try {
 		// paginate messages
-		let page = await messenger.messages.list(folderId);
+		let page = await awaitWithDebug(
+			messenger.messages.list(folderId),
+			debugLabel ? `messages.list for ${debugLabel}` : null
+		);
+		if (debugLabel) console.debug(`[ThirdStats] ${debugLabel}: ${page.messages.length} messages on first page`);
 		for (let message of page.messages) {
 			const messagesOutsideDateFilter = message.date < from || message.date > to;
 			if (!(dateFilterActive && messagesOutsideDateFilter)) {
@@ -121,7 +144,11 @@ const queryMessages = async function* (folderId, fromDate, toDate) {
 			}
 		}
 		while (page.id) {
-			page = await messenger.messages.continueList(page.id);
+			page = await awaitWithDebug(
+				messenger.messages.continueList(page.id),
+				debugLabel ? `messages.continueList for ${debugLabel}` : null
+			);
+			if (debugLabel) console.debug(`[ThirdStats] ${debugLabel}: ${page.messages.length} messages on next page`);
 			for (let message of page.messages) {
 				const messagesOutsideDateFilter = message.date < from || message.date > to;
 				if (!(dateFilterActive && messagesOutsideDateFilter)) {
