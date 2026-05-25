@@ -22,6 +22,9 @@ const props = defineProps({
 	datasets: Array,
 	horizontal: Boolean,
 	ordinate: Boolean,
+	formatValue: Function,
+	xLabel: String,
+	yLabel: String,
 });
 
 
@@ -67,7 +70,12 @@ const draw = () => {
 					intersect: true,
 					position: 'nearest',
 					callbacks: {
-						label: context => ' ' + context.formattedValue + ' ' + context.dataset.label,
+						label: context => {
+							const value = props.formatValue
+								? props.formatValue(context.parsed[props.horizontal ? 'x' : 'y'])
+								: context.formattedValue;
+							return ' ' + value + ' ' + context.dataset.label;
+						},
 						labelColor: context => {
 							return {
 								borderWidth: 2,
@@ -80,6 +88,10 @@ const draw = () => {
 			},
 			scales: {
 				x: {
+					title: {
+						display: Boolean(props.xLabel),
+						text: props.xLabel,
+					},
 					border: {
 						display: false,
 					},
@@ -91,10 +103,16 @@ const draw = () => {
 					ticks: {
 						maxRotation: 0,
 						padding: props.horizontal ? 0 : 10,
+						precision: props.formatValue ? undefined : 0,
+						callback: props.horizontal && props.formatValue ? value => props.formatValue(value) : undefined,
 					},
 					beginAtZero: true,
 				},
 				y: {
+					title: {
+						display: Boolean(props.yLabel),
+						text: props.yLabel,
+					},
 					border: {
 						display: false,
 					},
@@ -108,6 +126,10 @@ const draw = () => {
 						maxRotation: 0,
 						padding: props.horizontal ? 0 : 10,
 						autoSkipPadding: 0,
+						precision: props.formatValue ? undefined : 0,
+						callback: props.horizontal
+							? value => props.labels[value] ?? value
+							: (props.formatValue ? value => props.formatValue(value) : undefined),
 					},
 					beginAtZero: true,
 				}

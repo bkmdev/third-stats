@@ -25,6 +25,7 @@ const props = defineProps({
 	info: Object,
 	labels: Array,
 	datasets: Array,
+	formatValue: Function,
 });
 
 // calculate opacity as two digit hex for given value based on max value
@@ -71,7 +72,12 @@ const draw = () => {
 					position: 'nearest',
 					callbacks: {
 						title: context => context[0].label,
-						label: context => ' ' + context.formattedValue + ' ' + context.dataset.label,
+						label: context => {
+							const value = props.formatValue
+								? props.formatValue(context.parsed)
+								: context.formattedValue;
+							return ' ' + value + ' ' + context.dataset.label;
+						},
 						labelColor: context => {
 							return {
 								borderWidth: 2,

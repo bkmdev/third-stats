@@ -1,5 +1,8 @@
 <template>
 	<div class="text-normal background-normal position-relative">
+		<div v-if="isMockData" class="mock-data-banner">
+			Preview mode: mock data only. No Thunderbird or mailbox data is loaded.
+		</div>
 		<!-- progress indicator -->
 		<div class="progress position-fixed w-available top-0 right-0">
 			<div
@@ -320,6 +323,7 @@
 					<div class='text-gray'>{{ t('stats.totalMailSize') }}</div>
 					<div class='featured'>{{ totalMailSize }}</div>
 					<div class='text-gray'>{{ t('stats.mailsWithAttachments', [mailsWithAttachments]) }}</div>
+					<div class='text-gray text-small'>Across folders/labels</div>
 				</div>
 				<!-- starred / tagged -->
 				<div>
@@ -358,6 +362,18 @@
 			</section>
 			<!-- charts -->
 			<section v-if="display.numbers.total > 0" class="charts mt-3">
+				<div class="chart-metric d-flex justify-end align-center gap-0-5 mb-1">
+					<span class="text-gray text-small">Charts show</span>
+					<button
+						v-for="mode in chartMetricModes"
+						:key="mode"
+						class="btn-thin"
+						:class="{ 'chart-metric-active': preferences.chartMetric === mode, 'button-secondary': preferences.chartMetric !== mode }"
+						@click="preferences.chartMetric = mode"
+					>
+						{{ chartMetricLabels[mode] }}
+					</button>
+				</div>
 				<div
 					id="chart-area-top"
 					class="chart-area"
@@ -439,11 +455,25 @@
 							<!-- emails per year over total time -->
 							<LineChart
 								v-if="tabTotal === tabsTotal.years && !preferences.sections.total.comparison"
+								:key="'years-' + preferences.chartMetric"
+								:title="totalDataTitle(primaryMetric)"
 								:datasets="yearsChartData.datasets"
 								:labels="yearsChartData.labels"
 								:ordinate="options.ordinate"
 								:abscissa="true"
 								:unfinished="active.period.end == null"
+								:format-value="metricValueFormatter"
+							/>
+							<LineChart
+								v-if="tabTotal === tabsTotal.years && !preferences.sections.total.comparison && preferences.chartMetric === 'both'"
+								key="years-size-both"
+								:title="totalDataTitle('size')"
+								:datasets="lineChartData('yearsData', 'size').datasets"
+								:labels="lineChartData('yearsData', 'size').labels"
+								:ordinate="options.ordinate"
+								:abscissa="true"
+								:unfinished="active.period.end == null"
+								:format-value="sizeMetricValueFormatter"
 							/>
 							<LineChart
 								v-if="tabTotal === tabsTotal.years && preferences.sections.total.comparison"
@@ -456,11 +486,25 @@
 							<!-- emails per quarter over total time -->
 							<LineChart
 								v-if="tabTotal === tabsTotal.quarters && !preferences.sections.total.comparison"
+								:key="'quarters-' + preferences.chartMetric"
+								:title="totalDataTitle(primaryMetric)"
 								:datasets="quartersChartData.datasets"
 								:labels="quartersChartData.labels"
 								:ordinate="options.ordinate"
 								:abscissa="true"
 								:unfinished="active.period.end == null"
+								:format-value="metricValueFormatter"
+							/>
+							<LineChart
+								v-if="tabTotal === tabsTotal.quarters && !preferences.sections.total.comparison && preferences.chartMetric === 'both'"
+								key="quarters-size-both"
+								:title="totalDataTitle('size')"
+								:datasets="lineChartData('quartersData', 'size').datasets"
+								:labels="lineChartData('quartersData', 'size').labels"
+								:ordinate="options.ordinate"
+								:abscissa="true"
+								:unfinished="active.period.end == null"
+								:format-value="sizeMetricValueFormatter"
 							/>
 							<LineChart
 								v-if="tabTotal === tabsTotal.quarters && preferences.sections.total.comparison"
@@ -473,11 +517,25 @@
 							<!-- emails per month over total time -->
 							<LineChart
 								v-if="tabTotal === tabsTotal.months && !preferences.sections.total.comparison"
+								:key="'months-' + preferences.chartMetric"
+								:title="totalDataTitle(primaryMetric)"
 								:datasets="monthsChartData.datasets"
 								:labels="monthsChartData.labels"
 								:ordinate="options.ordinate"
 								:abscissa="true"
 								:unfinished="active.period.end == null"
+								:format-value="metricValueFormatter"
+							/>
+							<LineChart
+								v-if="tabTotal === tabsTotal.months && !preferences.sections.total.comparison && preferences.chartMetric === 'both'"
+								key="months-size-both"
+								:title="totalDataTitle('size')"
+								:datasets="lineChartData('monthsData', 'size').datasets"
+								:labels="lineChartData('monthsData', 'size').labels"
+								:ordinate="options.ordinate"
+								:abscissa="true"
+								:unfinished="active.period.end == null"
+								:format-value="sizeMetricValueFormatter"
 							/>
 							<LineChart
 								v-if="tabTotal === tabsTotal.months && preferences.sections.total.comparison"
@@ -490,11 +548,25 @@
 							<!-- emails per week over total time -->
 							<LineChart
 								v-if="tabTotal === tabsTotal.weeks && !preferences.sections.total.comparison"
+								:key="'weeks-' + preferences.chartMetric"
+								:title="totalDataTitle(primaryMetric)"
 								:datasets="weeksChartData.datasets"
 								:labels="weeksChartData.labels"
 								:ordinate="options.ordinate"
 								:abscissa="true"
 								:unfinished="active.period.end == null"
+								:format-value="metricValueFormatter"
+							/>
+							<LineChart
+								v-if="tabTotal === tabsTotal.weeks && !preferences.sections.total.comparison && preferences.chartMetric === 'both'"
+								key="weeks-size-both"
+								:title="totalDataTitle('size')"
+								:datasets="lineChartData('weeksData', 'size').datasets"
+								:labels="lineChartData('weeksData', 'size').labels"
+								:ordinate="options.ordinate"
+								:abscissa="true"
+								:unfinished="active.period.end == null"
+								:format-value="sizeMetricValueFormatter"
 							/>
 							<LineChart
 								v-if="tabTotal === tabsTotal.weeks && preferences.sections.total.comparison"
@@ -547,22 +619,54 @@
 							<!-- activity per day received -->
 							<MatrixChart
 								cid="activity-received"
+								:key="'activity-received-' + preferences.chartMetric"
+								:title="directionalTitle('Received', primaryMetric)"
 								color="#0a84ff"
 								:spacing="1"
 								:rounding="5"
 								:dimension="{ cols: 53, rows: 7 }"
 								:parseTime="true"
 								:datasets="[dateChartData.received]"
+								:format-value="metricValueFormatter"
+							/>
+							<MatrixChart
+								v-if="preferences.chartMetric === 'both'"
+								cid="activity-received-size"
+								key="activity-received-size-both"
+								:title="directionalTitle('Received', 'size')"
+								color="#0a84ff"
+								:spacing="1"
+								:rounding="5"
+								:dimension="{ cols: 53, rows: 7 }"
+								:parseTime="true"
+								:datasets="[dateChartDataForMetric('size').received]"
+								:format-value="sizeMetricValueFormatter"
 							/>
 							<!-- activity per day sent -->
 							<MatrixChart
 								cid="activity-send"
+								:key="'activity-send-' + preferences.chartMetric"
+								:title="directionalTitle('Sent', primaryMetric)"
 								color="#e64db9"
 								:spacing="1"
 								:rounding="5"
 								:parseTime="true"
 								:dimension="{ cols: 53, rows: 7 }"
 								:datasets="[dateChartData.sent]"
+								:format-value="metricValueFormatter"
+							/>
+							<MatrixChart
+								v-if="preferences.chartMetric === 'both'"
+								cid="activity-send-size"
+								key="activity-send-size-both"
+								:title="directionalTitle('Sent', 'size')"
+								color="#e64db9"
+								:spacing="1"
+								:rounding="5"
+								:parseTime="true"
+								:dimension="{ cols: 53, rows: 7 }"
+								:datasets="[dateChartDataForMetric('size').sent]"
+								:format-value="sizeMetricValueFormatter"
 							/>
 						</div>
 					</div>
@@ -620,9 +724,25 @@
 							<!-- emails per time of day -->
 							<BarChart
 								v-if="tabOnedim === tabsOnedim.daytime && !preferences.sections.onedim.comparison"
+								:key="'daytime-' + preferences.chartMetric"
+								:title="totalMessageTitle(primaryMetric)"
 								:datasets="daytimeChartData.datasets"
 								:labels="daytimeChartData.labels"
 								:ordinate="options.ordinate"
+								:format-value="metricValueFormatter"
+								x-label="Hour"
+								:y-label="valueAxisLabel(primaryMetric)"
+							/>
+							<BarChart
+								v-if="tabOnedim === tabsOnedim.daytime && !preferences.sections.onedim.comparison && preferences.chartMetric === 'both'"
+								key="daytime-size-both"
+								:title="totalMessageTitle('size')"
+								:datasets="barChartData('daytimeData', 'size').datasets"
+								:labels="barChartData('daytimeData', 'size').labels"
+								:ordinate="options.ordinate"
+								:format-value="sizeMetricValueFormatter"
+								x-label="Hour"
+								:y-label="valueAxisLabel('size')"
 							/>
 							<BarChart
 								v-if="tabOnedim === tabsOnedim.daytime && preferences.sections.onedim.comparison"
@@ -633,9 +753,25 @@
 							<!-- emails per day of week -->
 							<BarChart
 								v-if="tabOnedim === tabsOnedim.weekday && !preferences.sections.onedim.comparison"
+								:key="'weekday-' + preferences.chartMetric"
+								:title="totalMessageTitle(primaryMetric)"
 								:datasets="weekdayChartData.datasets"
 								:labels="weekdayChartData.labels"
 								:ordinate="options.ordinate"
+								:format-value="metricValueFormatter"
+								x-label="Weekday"
+								:y-label="valueAxisLabel(primaryMetric)"
+							/>
+							<BarChart
+								v-if="tabOnedim === tabsOnedim.weekday && !preferences.sections.onedim.comparison && preferences.chartMetric === 'both'"
+								key="weekday-size-both"
+								:title="totalMessageTitle('size')"
+								:datasets="weekdayBarChartData('size').datasets"
+								:labels="weekdayBarChartData('size').labels"
+								:ordinate="options.ordinate"
+								:format-value="sizeMetricValueFormatter"
+								x-label="Weekday"
+								:y-label="valueAxisLabel('size')"
 							/>
 							<BarChart
 								v-if="tabOnedim === tabsOnedim.weekday && preferences.sections.onedim.comparison"
@@ -646,9 +782,25 @@
 							<!-- emails per month of year -->
 							<BarChart
 								v-if="tabOnedim === tabsOnedim.month && !preferences.sections.onedim.comparison"
+								:key="'month-' + preferences.chartMetric"
+								:title="totalMessageTitle(primaryMetric)"
 								:datasets="monthChartData.datasets"
 								:labels="monthChartData.labels"
 								:ordinate="options.ordinate"
+								:format-value="metricValueFormatter"
+								x-label="Month"
+								:y-label="valueAxisLabel(primaryMetric)"
+							/>
+							<BarChart
+								v-if="tabOnedim === tabsOnedim.month && !preferences.sections.onedim.comparison && preferences.chartMetric === 'both'"
+								key="month-size-both"
+								:title="totalMessageTitle('size')"
+								:datasets="barChartData('monthData', 'size').datasets"
+								:labels="barChartData('monthData', 'size').labels"
+								:ordinate="options.ordinate"
+								:format-value="sizeMetricValueFormatter"
+								x-label="Month"
+								:y-label="valueAxisLabel('size')"
 							/>
 							<BarChart
 								v-if="tabOnedim === tabsOnedim.month && preferences.sections.onedim.comparison"
@@ -680,22 +832,54 @@
 							<!-- emails per weekday per hour received -->
 							<MatrixChart
 								cid="wd-per-hour-received"
+								:key="'wd-per-hour-received-' + preferences.chartMetric"
+								:title="directionalTitle('Received', primaryMetric)"
 								color="#0a84ff"
 								:spacing="1"
 								:rounding="5"
 								:dimension="{ cols: 24, rows: 7 }"
 								:parseTime="false"
 								:datasets="[weekdayPerHourChartData.received]"
+								:format-value="metricValueFormatter"
+							/>
+							<MatrixChart
+								v-if="preferences.chartMetric === 'both'"
+								cid="wd-per-hour-received-size"
+								key="wd-per-hour-received-size-both"
+								:title="directionalTitle('Received', 'size')"
+								color="#0a84ff"
+								:spacing="1"
+								:rounding="5"
+								:dimension="{ cols: 24, rows: 7 }"
+								:parseTime="false"
+								:datasets="[weekdayPerHourChartDataForMetric('size').received]"
+								:format-value="sizeMetricValueFormatter"
 							/>
 							<!-- emails per weekday per hour sent -->
 							<MatrixChart
 								cid="wd-per-hour-send"
+								:key="'wd-per-hour-send-' + preferences.chartMetric"
+								:title="directionalTitle('Sent', primaryMetric)"
 								color="#e64db9"
 								:spacing="1"
 								:rounding="5"
 								:dimension="{ cols: 24, rows: 7 }"
 								:parseTime="false"
 								:datasets="[weekdayPerHourChartData.sent]"
+								:format-value="metricValueFormatter"
+							/>
+							<MatrixChart
+								v-if="preferences.chartMetric === 'both'"
+								cid="wd-per-hour-send-size"
+								key="wd-per-hour-send-size-both"
+								:title="directionalTitle('Sent', 'size')"
+								color="#e64db9"
+								:spacing="1"
+								:rounding="5"
+								:dimension="{ cols: 24, rows: 7 }"
+								:parseTime="false"
+								:datasets="[weekdayPerHourChartDataForMetric('size').sent]"
+								:format-value="sizeMetricValueFormatter"
 							/>
 						</div>
 					</div>
@@ -728,12 +912,27 @@
 						<div class="tab-content mt-1">
 							<!-- contacts most emails received from -->
 							<BarChart
-								v-if="tabLeader === tabsLeader.contactsReceived && receivedContactLeadersChartDataExists"
+								v-if="tabLeader === tabsLeader.contactsReceived && showCountCharts && receivedContactLeadersChartDataExists"
+								:key="'received-count-' + preferences.chartMetric"
+								:title="leaderTitle('count')"
 								:datasets="receivedContactLeadersChartData.datasets"
 								:labels="receivedContactLeadersChartData.labels"
 								:horizontal="true"
+								:x-label="valueAxisLabel('count')"
+								y-label="Sender"
 							/>
-							<div v-if="tabLeader === tabsLeader.contactsReceived && !receivedContactLeadersChartDataExists" class="tab-empty text-center mt-5">
+							<BarChart
+								v-if="tabLeader === tabsLeader.contactsReceived && showSizeCharts && receivedContactLeadersSizeChartDataExists"
+								:key="'received-size-' + preferences.chartMetric"
+								:title="leaderTitle('size')"
+								:datasets="receivedContactLeadersSizeChartData.datasets"
+								:labels="receivedContactLeadersSizeChartData.labels"
+								:horizontal="true"
+								:format-value="formatBytes"
+								:x-label="valueAxisLabel('size')"
+								y-label="Sender"
+							/>
+							<div v-if="tabLeader === tabsLeader.contactsReceived && !receivedContactLeadersChartDataExists && !receivedContactLeadersSizeChartDataExists" class="tab-empty text-center mt-5">
 								<svg class="icon icon-large icon-gray icon-thin d-block m-0-auto" viewBox="0 0 24 24">
 									<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
 									<path d="M12.983 8.978c3.955 -.182 7.017 -1.446 7.017 -2.978c0 -1.657 -3.582 -3 -8 -3c-1.661 0 -3.204 .19 -4.483 .515m-2.783 1.228c-.471 .382 -.734 .808 -.734 1.257c0 1.22 1.944 2.271 4.734 2.74" />
@@ -745,12 +944,27 @@
 							</div>
 							<!-- contacts most emails sent to -->
 							<BarChart
-								v-if="tabLeader === tabsLeader.contactsSent && sentContactLeadersChartDataExists"
+								v-if="tabLeader === tabsLeader.contactsSent && showCountCharts && sentContactLeadersChartDataExists"
+								:key="'sent-count-' + preferences.chartMetric"
+								:title="leaderTitle('count')"
 								:datasets="sentContactLeadersChartData.datasets"
 								:labels="sentContactLeadersChartData.labels"
 								:horizontal="true"
+								:x-label="valueAxisLabel('count')"
+								y-label="Recipient"
 							/>
-							<div v-if="tabLeader === tabsLeader.contactsSent && !sentContactLeadersChartDataExists" class="tab-empty text-center mt-5">
+							<BarChart
+								v-if="tabLeader === tabsLeader.contactsSent && showSizeCharts && sentContactLeadersSizeChartDataExists"
+								:key="'sent-size-' + preferences.chartMetric"
+								:title="leaderTitle('size')"
+								:datasets="sentContactLeadersSizeChartData.datasets"
+								:labels="sentContactLeadersSizeChartData.labels"
+								:horizontal="true"
+								:format-value="formatBytes"
+								:x-label="valueAxisLabel('size')"
+								y-label="Recipient"
+							/>
+							<div v-if="tabLeader === tabsLeader.contactsSent && !sentContactLeadersChartDataExists && !sentContactLeadersSizeChartDataExists" class="tab-empty text-center mt-5">
 								<svg class="icon icon-large icon-gray icon-thin d-block m-0-auto" viewBox="0 0 24 24">
 									<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
 									<path d="M12.983 8.978c3.955 -.182 7.017 -1.446 7.017 -2.978c0 -1.657 -3.582 -3 -8 -3c-1.661 0 -3.204 .19 -4.483 .515m-2.783 1.228c-.471 .382 -.734 .808 -.734 1.257c0 1.22 1.944 2.271 4.734 2.74" />
@@ -762,12 +976,27 @@
 							</div>
 							<!-- contacts flagged as junk -->
 							<BarChart
-								v-if="tabLeader === tabsLeader.contactsJunk && junkContactLeadersChartDataExists"
+								v-if="tabLeader === tabsLeader.contactsJunk && showCountCharts && junkContactLeadersChartDataExists"
+								:key="'junk-count-' + preferences.chartMetric"
+								:title="leaderTitle('count')"
 								:datasets="junkContactLeadersChartData.datasets"
 								:labels="junkContactLeadersChartData.labels"
 								:horizontal="true"
+								:x-label="valueAxisLabel('count')"
+								y-label="Sender"
 							/>
-							<div v-if="tabLeader === tabsLeader.contactsJunk && !junkContactLeadersChartDataExists" class="tab-empty text-center mt-5">
+							<BarChart
+								v-if="tabLeader === tabsLeader.contactsJunk && showSizeCharts && junkContactLeadersSizeChartDataExists"
+								:key="'junk-size-' + preferences.chartMetric"
+								:title="leaderTitle('size')"
+								:datasets="junkContactLeadersSizeChartData.datasets"
+								:labels="junkContactLeadersSizeChartData.labels"
+								:horizontal="true"
+								:format-value="formatBytes"
+								:x-label="valueAxisLabel('size')"
+								y-label="Sender"
+							/>
+							<div v-if="tabLeader === tabsLeader.contactsJunk && !junkContactLeadersChartDataExists && !junkContactLeadersSizeChartDataExists" class="tab-empty text-center mt-5">
 								<svg class="icon icon-large icon-gray icon-thin d-block m-0-auto" viewBox="0 0 24 24">
 									<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
 									<path d="M12.983 8.978c3.955 -.182 7.017 -1.446 7.017 -2.978c0 -1.657 -3.582 -3 -8 -3c-1.661 0 -3.204 .19 -4.483 .515m-2.783 1.228c-.471 .382 -.734 .808 -.734 1.257c0 1.22 1.944 2.271 4.734 2.74" />
@@ -802,9 +1031,21 @@
 						<div class="tab-content mt-1">
 							<!-- folders emails received -->
 							<DoughnutChart
+								v-if="showCountCharts"
+								:key="'folders-count-' + preferences.chartMetric"
+								:title="folderTitle('count')"
 								:info="{ number: foldersChartData.labels.length, label: t('stats.nonEmptyFolders', foldersChartData.labels.length) }"
 								:datasets="foldersChartData.datasets"
 								:labels="foldersChartData.labels"
+							/>
+							<DoughnutChart
+								v-if="showSizeCharts"
+								:key="'folders-size-' + preferences.chartMetric"
+								:title="folderTitle('size')"
+								:info="{ number: totalMailSize, label: 'across folders' }"
+								:datasets="foldersSizeChartData.datasets"
+								:labels="foldersSizeChartData.labels"
+								:format-value="formatBytes"
 							/>
 						</div>
 					</div>
@@ -831,12 +1072,27 @@
 						<div class="tab-content mt-1">
 							<!-- tags count -->
 							<BarChart
-								v-if="tagsChartDataExists"
+								v-if="showCountCharts && tagsChartDataExists"
+								:key="'tags-count-' + preferences.chartMetric"
+								:title="tagTitle('count')"
 								:datasets="tagsChartData.datasets"
 								:labels="tagsChartData.labels"
 								:horizontal="true"
+								:x-label="valueAxisLabel('count')"
+								y-label="Tag"
 							/>
-							<div v-if="!tagsChartDataExists" class="tab-empty text-center mt-5">
+							<BarChart
+								v-if="showSizeCharts && tagsSizeChartDataExists"
+								:key="'tags-size-' + preferences.chartMetric"
+								:title="tagTitle('size')"
+								:datasets="tagsSizeChartData.datasets"
+								:labels="tagsSizeChartData.labels"
+								:horizontal="true"
+								:format-value="formatBytes"
+								:x-label="valueAxisLabel('size')"
+								y-label="Tag"
+							/>
+							<div v-if="!tagsChartDataExists && !tagsSizeChartDataExists" class="tab-empty text-center mt-5">
 								<svg class="icon icon-large icon-gray icon-thin d-block m-0-auto" viewBox="0 0 24 24">
 									<path stroke="none" d="M0 0h24v24H0z" fill="none"/>
 									<path d="M12.983 8.978c3.955 -.182 7.017 -1.446 7.017 -2.978c0 -1.657 -3.582 -3 -8 -3c-1.661 0 -3.204 .19 -4.483 .515m-2.783 1.228c-.471 .382 -.734 .808 -.734 1.257c0 1.22 1.944 2.271 4.734 2.74" />
@@ -908,6 +1164,7 @@ import LiveAge from "@/parts/LiveAge.vue";
 import ProjectMeta from "@/parts/ProjectMeta.vue";
 
 const { t, locale } = useI18n();
+const isMockData = Boolean(globalThis.__THIRD_STATS_MOCK__);
 
 // example date formats
 const now = new Date();
@@ -965,6 +1222,7 @@ const progress = reactive({
 
 // preferences for stats page configuration
 const preferences = reactive({
+	chartMetric: 'count',
 	sections: {
 		total: {
 			expand: false,
@@ -1048,6 +1306,55 @@ const initData = () => ({
 		sent: {},
 	},
 	tags: {},
+	sizes: {
+		yearsData: {
+			received: {},
+			sent: {},
+		},
+		quartersData: {
+			received: {},
+			sent: {},
+		},
+		monthsData: {
+			received: {},
+			sent: {},
+		},
+		weeksData: {
+			received: {},
+			sent: {},
+		},
+		dateData: {
+			received: {},
+			sent: {},
+		},
+		daytimeData: {
+			received: new NumberedObject(24),
+			sent: new NumberedObject(24),
+		},
+		weekdayData: {
+			received: new NumberedObject(7),
+			sent: new NumberedObject(7),
+		},
+		monthData: {
+			received: new NumberedObject(12),
+			sent: new NumberedObject(12),
+		},
+		weekdayPerHourData: {
+			received: new NumberedObject(7, 24),
+			sent: new NumberedObject(7, 24),
+		},
+		contacts: {
+			received: {},
+			sent: {},
+			junk: {},
+		},
+		folders: {
+			received: {},
+			sent: {},
+		},
+		tags: {},
+		messages: [],
+	},
 });
 
 // processed data to show; data structure see initData
@@ -1185,6 +1492,17 @@ const getAccounts = async () => {
 	active.account = id;
 };
 
+const addSize = (target, key, size) => {
+	if (!key || !size) return;
+	target[key] = (target[key] ?? 0) + size;
+};
+
+const addNestedSize = (target, key, nestedKey, size) => {
+	if (!key || nestedKey === undefined || nestedKey === null || !size) return;
+	if (!(key in target)) target[key] = {};
+	addSize(target[key], nestedKey, size);
+};
+
 // Extract information of a single message <m> with accounts <identityList>
 // and update given <data> object.
 // Returns string type 'sent'|'received'
@@ -1201,7 +1519,8 @@ const analyzeMessage = (data, m, identityList) => {
 	const author = extractEmailAddress(m.author);
 	// numbers
 	data.numbers.total++;
-	data.numbers.totalSize += m.size ?? 0;
+	const messageSize = m.size ?? 0;
+	data.numbers.totalSize += messageSize;
 	if (m.hasAttachments) data.numbers.withAttachments++;
 	if (m.read === false) data.numbers.unread++;
 	if (identityList.includes(author)) {
@@ -1225,6 +1544,7 @@ const analyzeMessage = (data, m, identityList) => {
 	} else {
 		data.yearsData[type][y]++;
 	}
+	addSize(data.sizes.yearsData[type], y, messageSize);
 	// quarters
 	const qn = quarterNumber(m.date);
 	if (!(y in data.quartersData[type])) {
@@ -1237,6 +1557,7 @@ const analyzeMessage = (data, m, identityList) => {
 			data.quartersData[type][y][qn]++;
 		}
 	}
+	addNestedSize(data.sizes.quartersData[type], y, qn, messageSize);
 	// months
 	const mo = m.date.getMonth();
 	if (!(y in data.monthsData[type])) {
@@ -1249,6 +1570,7 @@ const analyzeMessage = (data, m, identityList) => {
 			data.monthsData[type][y][mo]++;
 		}
 	}
+	addNestedSize(data.sizes.monthsData[type], y, mo, messageSize);
 	// weeks
 	const wn = weekNumber(m.date);
 	const ywn = wn == 53 && mo == 0 ? y-1 : y; // adjust year for first days of January that are before week 1
@@ -1262,14 +1584,18 @@ const analyzeMessage = (data, m, identityList) => {
 			data.weeksData[type][ywn][wn]++;
 		}
 	}
+	addNestedSize(data.sizes.weeksData[type], ywn, wn, messageSize);
 	// daytime
 	const dt = m.date.getHours();
 	data.daytimeData[type][dt]++;
+	data.sizes.daytimeData[type][dt] += messageSize;
 	// weekday
 	const wd = m.date.getDay();
 	data.weekdayData[type][wd]++;
+	data.sizes.weekdayData[type][wd] += messageSize;
 	// month
 	data.monthData[type][mo]++;
+	data.sizes.monthData[type][mo] += messageSize;
 	// dates
 	const iso = m.date.toISOString().substr(0, 10);
 	if (!(iso in data.dateData[type])) {
@@ -1277,8 +1603,10 @@ const analyzeMessage = (data, m, identityList) => {
 	} else {
 		data.dateData[type][iso]++;
 	}
+	addSize(data.sizes.dateData[type], iso, messageSize);
 	// weekday per hour
 	data.weekdayPerHourData[type][wd][dt]++;
+	data.sizes.weekdayPerHourData[type][wd][dt] += messageSize;
 	// contacts (leaderboards)
 	switch (type) {
 		case 'sent':
@@ -1289,6 +1617,7 @@ const analyzeMessage = (data, m, identityList) => {
 				} else {
 					data.contacts.sent[r]++;
 				}
+				addSize(data.sizes.contacts.sent, r, messageSize);
 			});
 			break;
 		case 'received':
@@ -1297,6 +1626,7 @@ const analyzeMessage = (data, m, identityList) => {
 			} else {
 				data.contacts.received[author]++;
 			}
+			addSize(data.sizes.contacts.received, author, messageSize);
 			break;
 		default:
 			break;
@@ -1307,14 +1637,16 @@ const analyzeMessage = (data, m, identityList) => {
 		} else {
 			data.contacts.junk[author]++;
 		}
+		addSize(data.sizes.contacts.junk, author, messageSize);
 	}
 	// folders
-	const f = m.folder.name;
+	const f = m.folder.path || m.folder.name;
 	if (!(f in data.folders[type])) {
 		data.folders[type][f] = 1;
 	} else {
 		data.folders[type][f]++;
 	}
+	addSize(data.sizes.folders[type], f, messageSize);
 	// star
 	if (m.flagged === true) data.numbers.starred++;
 	// tags
@@ -1326,8 +1658,17 @@ const analyzeMessage = (data, m, identityList) => {
 			} else {
 				data.tags[tag]++;
 			}
+			addSize(data.sizes.tags, tag, messageSize);
 		});
 	}
+	data.sizes.messages.push({
+		id: m.id,
+		size: messageSize,
+		subject: m.subject,
+		author,
+		date: m.date,
+		folder: f,
+	});
 	// live update numbers section if corresponding option is enabled
 	if (options.liveCountUp) display.value.numbers = data.numbers;
 
@@ -1340,7 +1681,8 @@ const processMessages = async (data, folder, identityList) => {
 	// Only analyze existing, non-virtual folders
 	if (folder && !folder.isUnified && !folder.isVirtual) {
 		let n = 0, s = 0, r = 0;
-		for await (let m of queryMessages(folder.id, active.period.start, active.period.end)) {
+		const debugLabel = options.debug ? folder.path : null;
+		for await (let m of queryMessages(folder.id, active.period.start, active.period.end, debugLabel)) {
 			const type = analyzeMessage(data, m, identityList);
 			if (options.debug) {
 				n++;
@@ -1390,6 +1732,15 @@ const processAccount = async (a) => {
 	// post processing: sort folders
 	accountData.folders.received = sortAndLimitObject(accountData.folders.received);
 	accountData.folders.sent = sortAndLimitObject(accountData.folders.sent);
+	accountData.sizes.contacts.received = sortAndLimitObject(accountData.sizes.contacts.received, options.maxListCount);
+	accountData.sizes.contacts.sent = sortAndLimitObject(accountData.sizes.contacts.sent, options.maxListCount);
+	accountData.sizes.contacts.junk = sortAndLimitObject(accountData.sizes.contacts.junk, options.maxListCount);
+	accountData.sizes.folders.received = sortAndLimitObject(accountData.sizes.folders.received);
+	accountData.sizes.folders.sent = sortAndLimitObject(accountData.sizes.folders.sent);
+	accountData.sizes.tags = sortAndLimitObject(accountData.sizes.tags, options.maxListCount);
+	accountData.sizes.messages = accountData.sizes.messages
+		.sort((a, b) => b.size - a.size)
+		.slice(0, options.maxListCount);
 	// post processing: add timestamp of finished processing
 	accountData.meta.timestamp = Date.now();
 
@@ -1450,8 +1801,9 @@ const adjustSelectedYear = () => {
 const loadAccount = async (id, refresh, auto=false) => {
 	// start loading indication
 	isLoading.value = true;
-	// check id type
-	if (id === 'sum' && options.cache) {
+	try {
+		// check id type
+		if (id === 'sum' && options.cache) {
 		// set tab title
 		document.title = "ThirdStats: " + t("stats.allAccounts");
 		// deactivate list of folders
@@ -1577,6 +1929,55 @@ const loadAccount = async (id, refresh, auto=false) => {
 		sum.folders.sent = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.folders?.sent ?? []), [])));
 		// tags
 		sum.tags = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.tags ?? []), [])), options.maxListCount);
+		// sizes
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.yearsData?.received ?? {})])], [])
+			.map(y => { sum.sizes.yearsData.received[y] = accountsData.reduce((p,c) => c.sizes?.yearsData?.received?.[y] ? p+c.sizes.yearsData.received[y] : p, 0) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.yearsData?.sent ?? {})])], [])
+			.map(y => { sum.sizes.yearsData.sent[y] = accountsData.reduce((p,c) => c.sizes?.yearsData?.sent?.[y] ? p+c.sizes.yearsData.sent[y] : p, 0) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.quartersData?.received ?? {})])], [])
+			.map(y => { sum.sizes.quartersData.received[y] = sumObjects(accountsData.reduce((p,c) => c.sizes?.quartersData?.received?.[y] ? p.concat(c.sizes.quartersData.received[y]) : p, [])) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.quartersData?.sent ?? {})])], [])
+			.map(y => { sum.sizes.quartersData.sent[y] = sumObjects(accountsData.reduce((p,c) => c.sizes?.quartersData?.sent?.[y] ? p.concat(c.sizes.quartersData.sent[y]) : p, [])) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.monthsData?.received ?? {})])], [])
+			.map(y => { sum.sizes.monthsData.received[y] = sumObjects(accountsData.reduce((p,c) => c.sizes?.monthsData?.received?.[y] ? p.concat(c.sizes.monthsData.received[y]) : p, [])) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.monthsData?.sent ?? {})])], [])
+			.map(y => { sum.sizes.monthsData.sent[y] = sumObjects(accountsData.reduce((p,c) => c.sizes?.monthsData?.sent?.[y] ? p.concat(c.sizes.monthsData.sent[y]) : p, [])) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.weeksData?.received ?? {})])], [])
+			.map(y => { sum.sizes.weeksData.received[y] = sumObjects(accountsData.reduce((p,c) => c.sizes?.weeksData?.received?.[y] ? p.concat(c.sizes.weeksData.received[y]) : p, [])) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.weeksData?.sent ?? {})])], [])
+			.map(y => { sum.sizes.weeksData.sent[y] = sumObjects(accountsData.reduce((p,c) => c.sizes?.weeksData?.sent?.[y] ? p.concat(c.sizes.weeksData.sent[y]) : p, [])) });
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.dateData?.received ?? {})])], [])
+			.map(d => { sum.sizes.dateData.received[d] = accountsData.reduce((p,c) => c.sizes?.dateData?.received?.[d] ? p+c.sizes.dateData.received[d] : p, 0) })
+		accountsData.reduce((p,c) => [...new Set([...p ,...Object.keys(c.sizes?.dateData?.sent ?? {})])], [])
+			.map(d => { sum.sizes.dateData.sent[d] = accountsData.reduce((p,c) => c.sizes?.dateData?.sent?.[d] ? p+c.sizes.dateData.sent[d] : p, 0) })
+		for (let h = 0; h < 24; h++) {
+			sum.sizes.daytimeData.received[h] = accountsData.reduce((p,c) => p+(c.sizes?.daytimeData?.received?.[h] ?? 0), 0);
+			sum.sizes.daytimeData.sent[h] = accountsData.reduce((p,c) => p+(c.sizes?.daytimeData?.sent?.[h] ?? 0), 0);
+		}
+		for (let d = 0; d < 7; d++) {
+			sum.sizes.weekdayData.received[d] = accountsData.reduce((p,c) => p+(c.sizes?.weekdayData?.received?.[d] ?? 0), 0);
+			sum.sizes.weekdayData.sent[d] = accountsData.reduce((p,c) => p+(c.sizes?.weekdayData?.sent?.[d] ?? 0), 0);
+		}
+		for (let m = 0; m < 12; m++) {
+			sum.sizes.monthData.received[m] = accountsData.reduce((p,c) => p+(c.sizes?.monthData?.received?.[m] ?? 0), 0);
+			sum.sizes.monthData.sent[m] = accountsData.reduce((p,c) => p+(c.sizes?.monthData?.sent?.[m] ?? 0), 0);
+		}
+		for (let d = 0; d < 7; d++) {
+			for (let h = 0; h < 24; h++) {
+				sum.sizes.weekdayPerHourData.received[d][h] = accountsData.reduce((p,c) => p+(c.sizes?.weekdayPerHourData?.received?.[d]?.[h] ?? 0), 0);
+				sum.sizes.weekdayPerHourData.sent[d][h] = accountsData.reduce((p,c) => p+(c.sizes?.weekdayPerHourData?.sent?.[d]?.[h] ?? 0), 0);
+			}
+		}
+		sum.sizes.contacts.received = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.sizes?.contacts?.received ?? []), [])), options.maxListCount);
+		sum.sizes.contacts.sent = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.sizes?.contacts?.sent ?? []), [])), options.maxListCount);
+		sum.sizes.contacts.junk = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.sizes?.contacts?.junk ?? []), [])), options.maxListCount);
+		sum.sizes.folders.received = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.sizes?.folders?.received ?? []), [])));
+		sum.sizes.folders.sent = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.sizes?.folders?.sent ?? []), [])));
+		sum.sizes.tags = sortAndLimitObject(sumObjects(accountsData.reduce((p,c) => p.concat(c.sizes?.tags ?? []), [])), options.maxListCount);
+		sum.sizes.messages = accountsData
+			.reduce((p,c) => p.concat(c.sizes?.messages ?? []), [])
+			.sort((a, b) => b.size - a.size)
+			.slice(0, options.maxListCount);
 
 		// show summed stats or keep current view if processing was invoked automatically
 		display.value = auto && displayedAccountKey ? accountsData[displayedAccountKey] : sum;
@@ -1600,37 +2001,45 @@ const loadAccount = async (id, refresh, auto=false) => {
 			comparisonData.monthData[a.id] = sumObjects([accountsData[i].monthData.received, accountsData[i].monthData.sent]);
 		})
 		comparison.value = comparisonData;
-	} else {
-		// load single account from id
-		const account = await messenger.accounts.get(id);
-		// set tab title
-		document.title = "ThirdStats: " + account.name;
-		// (re)calculate list of folders
-		folders.value = await traverseAccount(account);
-		// only check storage if no refresh was requested cache is enabled
-		const result = options.cache ? await messenger.storage.local.get("stats-" + id) : null;
-		if (!refresh && result && result["stats-" + id]) {
-			// if cache is enabled and data already exists in storage, display it directly
-			display.value = JSON.parse(JSON.stringify(result["stats-" + id]));
 		} else {
-			// otherwise retrieve it first/again and track progress by processed folder count
-			progress.current = 1;
-			progress.max = folders.value.length;
-			// Handle debug output
-			if (options.debug) {
-				console.debug(`Processing account ${account.name}`, account);
-				console.debug(` total  %crecvd   %csent   %c📁 Folder path`, `color:${accentColors[1]}`, `color:${accentColors[0]}`, 'color:inherit');
+			// load single account from id
+			const account = await messenger.accounts.get(id);
+			// set tab title
+			document.title = "ThirdStats: " + account.name;
+			// (re)calculate list of folders
+			folders.value = await traverseAccount(account);
+			// only check storage if no refresh was requested cache is enabled
+			const result = options.cache ? await messenger.storage.local.get("stats-" + id) : null;
+			if (!refresh && result && result["stats-" + id]) {
+				// if cache is enabled and data already exists in storage, display it directly
+				display.value = JSON.parse(JSON.stringify(result["stats-" + id]));
+			} else {
+				// otherwise retrieve it first/again and track progress by processed folder count
+				progress.current = 1;
+				progress.max = folders.value.length;
+				// Handle debug output
+				if (options.debug) {
+					console.debug(`Processing account ${account.name}`, account);
+					console.debug(` total  %crecvd   %csent   %c📁 Folder path`, `color:${accentColors[1]}`, `color:${accentColors[0]}`, 'color:inherit');
+				}
+				await messenger.storage.local.set({ error: false });
+				await reprocessData(id);
+				progress.current = 0;
+				progress.max = 0;
 			}
-			await messenger.storage.local.set({ error: false });
-			await reprocessData(id);
-			progress.current = 0;
-			progress.max = 0;
 		}
+		// finally adjust displayed activity year
+		adjustSelectedYear();
+	} catch (err) {
+		error.account = true;
+		await messenger.storage.local.set({ error: true });
+		console.error("[ThirdStats] Failed to load account stats", err);
+	} finally {
+		progress.current = 0;
+		progress.max = 0;
+		// finished - stop loading indication
+		isLoading.value = false;
 	}
-	// finally adjust displayed activity year
-	adjustSelectedYear();
-	// finished - stop loading indication
-	isLoading.value = false;
 };
 
 // reset folder filter
@@ -1895,6 +2304,190 @@ const perYear = computed(() => {
 });
 const totalMailSize = computed(() => formatBytes(display.value.numbers.totalSize ?? 0));
 const mailsWithAttachments = computed(() => (display.value.numbers.withAttachments ?? 0).toLocaleString());
+const chartMetricModes = ['count', 'size', 'both'];
+const chartMetricLabels = {
+	count: 'Count',
+	size: 'Size',
+	both: 'Both',
+};
+const showCountCharts = computed(() => preferences.chartMetric !== 'size');
+const showSizeCharts = computed(() => preferences.chartMetric !== 'count');
+const primaryMetric = computed(() => preferences.chartMetric === 'both' ? 'count' : preferences.chartMetric);
+const metricValueFormatter = computed(() => preferences.chartMetric === 'size' ? formatBytes : null);
+const sizeMetricValueFormatter = formatBytes;
+const metricData = (key) => preferences.chartMetric === 'size'
+	? (display.value.sizes?.[key] ?? display.value[key])
+	: display.value[key];
+const dataForMetric = (key, metric) => metric === 'size'
+	? (display.value.sizes?.[key] ?? display.value[key])
+	: display.value[key];
+const metricName = (metric=preferences.chartMetric) => metric === 'size' ? 'Size' : 'Count';
+const totalDataTitle = (metric=preferences.chartMetric) => metric === 'size'
+	? 'Total Sent & Received Data'
+	: 'Total # of Sent & Received';
+const totalMessageTitle = (metric=preferences.chartMetric) => metric === 'size'
+	? 'Total Messages Sent & Received Sizes'
+	: 'Total Messages Sent & Received Count';
+const directionalTitle = (direction, metric=preferences.chartMetric) => `Total Messages ${direction} ${metricName(metric)}`;
+const leaderTitle = (metric=preferences.chartMetric) => {
+	if (tabLeader.value === tabsLeader.contactsSent) return directionalTitle('Sent', metric);
+	if (tabLeader.value === tabsLeader.contactsJunk) return `Total Junk Messages ${metricName(metric)}`;
+	return directionalTitle('Received', metric);
+};
+const folderTitle = (metric=preferences.chartMetric) => `Total Folder Message ${metricName(metric)}`;
+const tagTitle = (metric=preferences.chartMetric) => `Total Tagged Message ${metricName(metric)}`;
+const valueAxisLabel = (metric=preferences.chartMetric) => metric === 'size' ? 'Size' : 'Messages';
+const lineChartData = (key, tab) => {
+	const data = dataForMetric(key, tab);
+	const r = data.received;
+	const s = data.sent;
+	let labels = [], dr = [], ds = [];
+	if (key === 'yearsData') {
+		for (let y = minYear.value; y <= maxYear.value; ++y) {
+			labels.push(y);
+			dr.push(y in r ? r[y] : 0);
+			ds.push(y in s ? s[y] : 0);
+		}
+	}
+	if (key === 'quartersData') {
+		for (let y = minYear.value; y <= maxYear.value; ++y) {
+			for (let q = 1; q <= 4; ++q) {
+				if (y == minYear.value && q < quarterNumber(minDate.value)) continue;
+				if (y == maxYear.value && q > quarterNumber(maxDate.value)) break;
+				labels.push(y + " " + t("stats.abbreviations.quarter") + q);
+				dr.push(y in r && q in r[y] ? r[y][q] : 0);
+				ds.push(y in s && q in s[y] ? s[y][q] : 0);
+			}
+		}
+	}
+	if (key === 'monthsData') {
+		for (let y = minYear.value; y <= maxYear.value; ++y) {
+			for (let m = 0; m < 12; ++m) {
+				if (y == minYear.value && m < minDate.value.getMonth()) continue;
+				if (y == maxYear.value && m > maxDate.value.getMonth()) break;
+				labels.push(y + " " + monthNames(locale.value)[m]);
+				dr.push(y in r && m in r[y] ? r[y][m] : 0);
+				ds.push(y in s && m in s[y] ? s[y][m] : 0);
+			}
+		}
+	}
+	if (key === 'weeksData') {
+		weeksBetween(minDate.value, maxDate.value).forEach(week => {
+			const [y, w] = week;
+			labels.push(y + " " + t("stats.abbreviations.calendarWeek") + w);
+			dr.push(y in r && w in r[y] ? r[y][w] : 0);
+			ds.push(y in s && w in s[y] ? s[y][w] : 0);
+		})
+	}
+	return {
+		datasets: [
+			{
+				label: t("stats.mailsSent"),
+				data: ds,
+				borderColor: accentColors[0],
+			},
+			{
+				label: t("stats.mailsReceived"),
+				data: dr,
+				borderColor: accentColors[1],
+			},
+		],
+		labels,
+	};
+};
+
+const barChartData = (key, tab) => {
+	const data = dataForMetric(key, tab);
+	const r = data.received, s = data.sent;
+	return {
+		datasets: [
+			{
+				label: t("stats.mailsSent"),
+				data: Object.values(s),
+				borderColor: accentColors[0],
+			},
+			{
+				label: t("stats.mailsReceived"),
+				data: Object.values(r),
+				borderColor: accentColors[1],
+			},
+		],
+		labels: key === 'monthData' ? monthNames(locale.value) : Object.keys(r),
+	};
+};
+
+const weekdayBarChartData = (tab) => {
+	const data = dataForMetric('weekdayData', tab);
+	const r = Object.values(data.received);
+	const s = Object.values(data.sent);
+	let labels = [...weekdayNames(locale.value)];
+	for (let d = 0; d < 1/*options.startOfWeek*/; d++) {
+		r.push(r.shift());
+		s.push(s.shift());
+		labels.push(labels.shift());
+	}
+	return {
+		datasets: [
+			{
+				label: t("stats.mailsSent"),
+				data: s,
+				borderColor: accentColors[0],
+			},
+			{
+				label: t("stats.mailsReceived"),
+				data: r,
+				borderColor: accentColors[1],
+			},
+		],
+		labels,
+	};
+};
+
+const dateChartDataForMetric = (tab) => {
+	const year = preferences.sections.activity.year;
+	const startDate = new Date(year, 0, 1);
+	const endDate = new Date(year, 11, 31);
+	const data = dataForMetric('dateData', tab);
+	const receivedMap = Object.fromEntries(
+		Object.entries(data?.received || {}).filter(e => e[0].substring(0, 4) == year)
+	);
+	const sentMap = Object.fromEntries(
+		Object.entries(data?.sent || {}).filter(e => e[0].substring(0, 4) == year)
+	);
+
+	let r = [], s = [];
+	for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+		const key = d.toISOString().slice(0, 10);
+		r.push([key, receivedMap[key] || 0]);
+		s.push([key, sentMap[key] || 0]);
+	}
+
+	return {
+		received: { label: t("stats.mailsReceived"), data: r },
+		sent: { label: t("stats.mailsSent"), data: s },
+	};
+};
+
+const weekdayPerHourChartDataForMetric = (tab) => {
+	const data = dataForMetric('weekdayPerHourData', tab);
+	let rd = Object.values(data.received);
+	let sd = Object.values(data.sent);
+	let initDate = new Date(1970,0,4);
+	let r = rd.reduce((p,c,day) => [...p,...c.map((n,hour) => {
+		let d = new Date(initDate.setDate(4+day));
+		d = new Date(d.setHours(hour, 0, 0));
+		return [d.toISOString(), n];
+	})], []);
+	let s = sd.reduce((p,c,day) => [...p,...c.map((n,hour) => {
+		let d = new Date(initDate.setDate(4+day));
+		d = new Date(d.setHours(hour, 0, 0));
+		return [d.toISOString(), n];
+	})], []);
+	return {
+		received: { label: t("stats.mailsReceived"), data: r },
+		sent: { label: t("stats.mailsSent"), data: s },
+	};
+};
 // number of starred mails
 const starred = computed(() => {
 	return (display.value.numbers.starred && display.value.numbers.starred > 0)
@@ -1922,8 +2515,9 @@ const junkScore = computed(() => {
 
 // prepare sum data for years line chart
 const yearsChartData = computed(() => {
-	const r = display.value.yearsData.received;
-	const s = display.value.yearsData.sent;
+	const d = metricData('yearsData');
+	const r = d.received;
+	const s = d.sent;
 	let labels = [], dr = [], ds = [];
 	for (let y = minYear.value; y <= maxYear.value; ++y) {
 		labels.push(y);
@@ -1970,8 +2564,9 @@ const yearsComparedChartData = computed(() => {
 
 // prepare sum data for quarters line chart
 const quartersChartData = computed(() => {
-	const r = display.value.quartersData.received;
-	const s = display.value.quartersData.sent;
+	const d = metricData('quartersData');
+	const r = d.received;
+	const s = d.sent;
 	let labels = [], dr = [], ds = [];
 	for (let y = minYear.value; y <= maxYear.value; ++y) {
 		for (let q = 1; q <= 4; ++q) {
@@ -2034,8 +2629,9 @@ const quartersComparedChartData = computed(() => {
 
 // prepare data for months line chart
 const monthsChartData = computed(() => {
-	const r = display.value.monthsData.received;
-	const s = display.value.monthsData.sent;
+	const d = metricData('monthsData');
+	const r = d.received;
+	const s = d.sent;
 	let labels = [], dr = [], ds = [];
 	for (let y = minYear.value; y <= maxYear.value; ++y) {
 		for (let m = 0; m < 12; ++m) {
@@ -2098,8 +2694,9 @@ const monthsComparedChartData = computed(() => {
 
 // prepare data for weeks line chart
 const weeksChartData = computed(() => {
-	const r = display.value.weeksData.received;
-	const s = display.value.weeksData.sent;
+	const d = metricData('weeksData');
+	const r = d.received;
+	const s = d.sent;
 	let labels = [], dr = [], ds = [];
 	weeksBetween(minDate.value, maxDate.value).forEach(week => {
 		const [y, w] = week;
@@ -2152,7 +2749,8 @@ const weeksComparedChartData = computed(() => {
 
 // prepare data for daytime bar chart
 const daytimeChartData = computed(() => {
-	const r = display.value.daytimeData.received, s = display.value.daytimeData.sent;
+	const d = metricData('daytimeData');
+	const r = d.received, s = d.sent;
 	return {
 		datasets: [
 			{
@@ -2190,8 +2788,9 @@ const daytimeComparedChartData = computed(() => {
 
 // prepare data for weekday bar chart
 const weekdayChartData = computed(() => {
-	const r = Object.values(display.value.weekdayData.received);
-	const s = Object.values(display.value.weekdayData.sent);
+	const d = metricData('weekdayData');
+	const r = Object.values(d.received);
+	const s = Object.values(d.sent);
 	let labels = [...weekdayNames(locale.value)];
 	// TODO: start week with user defined day of week
 	for (let d = 0; d < 1/*options.startOfWeek*/; d++) {
@@ -2245,7 +2844,8 @@ const weekdayComparedChartData = computed(() => {
 
 // prepare data for month bar chart
 const monthChartData = computed(() => {
-	const r = display.value.monthData.received, s = display.value.monthData.sent;
+	const d = metricData('monthData');
+	const r = d.received, s = d.sent;
 	return {
 		datasets: [
 			{
@@ -2286,13 +2886,14 @@ const dateChartData = computed(() => {
 	// Generate all dates for the full year (Jan 1 to Dec 31)
 	const startDate = new Date(year, 0, 1);
 	const endDate = new Date(year, 11, 31);
+	const data = metricData('dateData');
 
 	// Build lookup maps from actual data
 	const receivedMap = Object.fromEntries(
-		Object.entries(display.value.dateData?.received || {}).filter(e => e[0].substring(0, 4) == year)
+		Object.entries(data?.received || {}).filter(e => e[0].substring(0, 4) == year)
 	);
 	const sentMap = Object.fromEntries(
-		Object.entries(display.value.dateData?.sent || {}).filter(e => e[0].substring(0, 4) == year)
+		Object.entries(data?.sent || {}).filter(e => e[0].substring(0, 4) == year)
 	);
 
 	// Generate full year data with 0 for empty days
@@ -2312,8 +2913,9 @@ const dateChartData = computed(() => {
 
 // prepare data for weekday/hour matrix charts
 const weekdayPerHourChartData = computed(() => {
-	let rd = Object.values(display.value.weekdayPerHourData.received);
-	let sd = Object.values(display.value.weekdayPerHourData.sent);
+	const data = metricData('weekdayPerHourData');
+	let rd = Object.values(data.received);
+	let sd = Object.values(data.sent);
 	let initDate = new Date(1970,0,4);
 	let r = rd.reduce((p,c,day) => [...p,...c.map((n,hour) => {
 		let d = new Date(initDate.setDate(4+day));
@@ -2351,6 +2953,24 @@ const sentContactLeadersChartDataExists = computed(() => {
 	return sentContactLeadersChartData.value.datasets[0].data?.length > 0;
 });
 
+// prepare data for sent email storage leaderboard horizontal bar chart
+const sentContactLeadersSizeChartData = computed(() => {
+	const s = display.value.sizes?.contacts?.sent || {};
+	return {
+		datasets: [
+			{
+				label: 'sent',
+				data: Object.values(s),
+				borderColor: accentColors[0],
+			},
+		],
+		labels: Object.keys(s),
+	};
+});
+const sentContactLeadersSizeChartDataExists = computed(() => {
+	return sentContactLeadersSizeChartData.value.datasets[0].data?.length > 0;
+});
+
 // prepare data for received emails leaderboard horizontal bar chart
 const receivedContactLeadersChartData = computed(() => {
 	const r = display.value.contacts.received;
@@ -2368,6 +2988,24 @@ const receivedContactLeadersChartData = computed(() => {
 // true if there are any sender contacts to display
 const receivedContactLeadersChartDataExists = computed(() => {
 	return receivedContactLeadersChartData.value.datasets[0].data?.length > 0;
+});
+
+// prepare data for received email storage leaderboard horizontal bar chart
+const receivedContactLeadersSizeChartData = computed(() => {
+	const r = display.value.sizes?.contacts?.received || {};
+	return {
+		datasets: [
+			{
+				label: 'received',
+				data: Object.values(r),
+				borderColor: accentColors[1],
+			},
+		],
+		labels: Object.keys(r),
+	};
+});
+const receivedContactLeadersSizeChartDataExists = computed(() => {
+	return receivedContactLeadersSizeChartData.value.datasets[0].data?.length > 0;
 });
 
 // prepare data for junk emails leaderboard horizontal bar chart
@@ -2390,6 +3028,25 @@ const junkContactLeadersChartDataExists = computed(() => {
 	return junkContactLeadersChartData.value.datasets[0].data?.length > 0;
 });
 
+// prepare data for junk email storage leaderboard horizontal bar chart
+const junkContactLeadersSizeChartData = computed(() => {
+	const r = display.value.sizes?.contacts?.junk || {};
+	const color = options.dark ? accentColors[2] : accentColors[3];
+	return {
+		datasets: [
+			{
+				label: 'junk',
+				data: Object.values(r),
+				borderColor: color,
+			},
+		],
+		labels: Object.keys(r),
+	};
+});
+const junkContactLeadersSizeChartDataExists = computed(() => {
+	return junkContactLeadersSizeChartData.value.datasets[0].data?.length > 0;
+});
+
 // prepare data for emails per folder doughnut charts
 const foldersChartData = computed(() => {
 	const r = display.value.folders.received, s = display.value.folders.sent;
@@ -2410,6 +3067,35 @@ const foldersChartData = computed(() => {
 			},
 			{
 				label: t("stats.mailsSent"),
+				data: ds,
+				color: accentColors[0],
+			},
+		],
+		labels: labels,
+	};
+});
+
+// prepare data for storage per folder doughnut charts
+const foldersSizeChartData = computed(() => {
+	const r = display.value.sizes?.folders?.received || {};
+	const s = display.value.sizes?.folders?.sent || {};
+	let dr = [], ds = [], labels = [];
+	let all = Array.from(new Set([...Object.keys(r), ...Object.keys(s)]));
+	all.sort((a, b) => ((r[b] ?? 0) + (s[b] ?? 0)) - ((r[a] ?? 0) + (s[a] ?? 0)));
+	all.forEach(d => {
+		dr.push(r[d] ? r[d] : 0)
+		ds.push(s[d] ? s[d] : 0)
+		labels.push(d)
+	});
+	return {
+		datasets: [
+			{
+				label: 'received',
+				data: dr,
+				color: accentColors[1],
+			},
+			{
+				label: 'sent',
 				data: ds,
 				color: accentColors[0],
 			},
@@ -2441,6 +3127,30 @@ const tagsChartData = computed(() => {
 // true if there is any tags data to display
 const tagsChartDataExists = computed(() => {
 	return tagsChartData.value.datasets[0].data?.length > 0;
+});
+
+// prepare data for email tags storage horizontal bar chart
+const tagsSizeChartData = computed(() => {
+	const r = sortAndLimitObject(display.value.sizes?.tags || {}) || {};
+	const color = options.dark ? accentColors[2] : accentColors[3];
+	const labels = [], colors = [];
+	Object.keys(r).forEach(key => {
+		labels.push(tags.value.find(tag => tag.key === key)?.tag || 'undefined');
+		colors.push(tags.value.find(tag => tag.key === key)?.color || color);
+	}, this);
+	return {
+		datasets: [
+			{
+				label: 'tagged',
+				data: Object.values(r),
+				borderColor: options.tagColors ? colors : color,
+			},
+		],
+		labels: labels,
+	};
+});
+const tagsSizeChartDataExists = computed(() => {
+	return tagsSizeChartData.value.datasets[0].data?.length > 0;
 });
 
 // merges received and sent contacts to a distinct list for contacts filter
@@ -2552,6 +3262,25 @@ onMounted(async () => {
 
 body {
 	overflow-x: hidden;
+}
+
+.mock-data-banner {
+	position: sticky;
+	top: 0;
+	z-index: 60;
+	padding: 0.5rem 1rem;
+	text-align: center;
+	font-weight: 600;
+	color: #fff;
+	background: #d71ea1;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.dark .chart-metric .chart-metric-active,
+.light .chart-metric .chart-metric-active {
+	color: #fff;
+	border-color: #0a84ff;
+	background: #0a84ff;
 }
 
 #stats {

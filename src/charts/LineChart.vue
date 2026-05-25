@@ -40,6 +40,7 @@ const props = defineProps({
 		type: Boolean,
 		default: true
 	},
+	formatValue: Function,
 	width: String,
 	height: String,
 });
@@ -83,7 +84,12 @@ const draw = () => {
 				tooltip: {
 					enabled: props.tooltips,
 					callbacks: {
-						label: context => ' ' + context.formattedValue + ' ' + context.dataset.label,
+						label: context => {
+							const value = props.formatValue
+								? props.formatValue(context.parsed.y)
+								: context.formattedValue;
+							return ' ' + value + ' ' + context.dataset.label;
+						},
 						labelColor: context => {
 							return {
 								borderWidth: 2,
@@ -122,7 +128,10 @@ const draw = () => {
 						display: false,
 						drawBorder: false,
 					},
-					beginAtZero: true
+					beginAtZero: true,
+					ticks: {
+						callback: props.formatValue ? value => props.formatValue(value) : undefined,
+					},
 				}
 			}
 		}
